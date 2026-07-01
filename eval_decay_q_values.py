@@ -232,7 +232,7 @@ for variable in ["mean", "sigma", "shift"]:
     for particle, results in RESULTS.items():
 
         best_pt_bin = max(next(iter(next(iter(results.values())).values())).items(),
-                          key=lambda kv: 1. / kv[1]["mean_unc"]**2)[0]
+                          key=lambda kv: kv[1]["raw_yields"])[0]
 
         c = make_canvas(f"{variable}_cent_{particle}")
         leg = make_legend()

@@ -74,11 +74,6 @@ def set_graph_style(g, year):
     g.SetLineColor(colors[year])
     g.SetLineWidth(2)
 
-def set_fit_style(g, year):
-
-    g.SetLineColor(colors[year])
-    g.SetLineWidth(2)
-
 
 # Draw decorations
 def set_plot_style(mg, xtitle, variable, labels, particle=None, cent_class=None, pt_range=None, title=None):

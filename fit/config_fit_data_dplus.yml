@@ -5,11 +5,11 @@ inputs:
   # e.g. <data_dir>/cent_0_20/2024/MassDistributions.root.
   data_dir: "/data/shared/CharmHadMassCalib/preprocess/Dplus"
   # skip_years: ['2024', '2025']
-  skip_cents: [[0, 20], [20, 30], [30, 40], [40, 50]]
+  # skip_cents: [[0, 20], [20, 30], [30, 40], [40, 50]]
 
 skip_cent_integrated: true
 
-max_workers: 40
+max_workers: 30
 
 zfit_cpus:
   intra: 20
@@ -19,7 +19,7 @@ fit_configs:
   # below one per pT bin
   mass:
     mins: [1.75, 1.75, 1.75, 1.73, 1.73, 1.73, 1.71, 1.66, 1.66, 1.66, 1.66, 1.66]
-    maxs: [1.95, 1.95, 1.95, 1.96, 1.96, 1.96, 2.00, 2.10, 2.10, 2.10, 2.19, 2.19]
+    maxs: [2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.10, 2.10, 2.10, 2.19, 2.19]
   rebin: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
   signal:
     signal_funcs: [
@@ -27,10 +27,14 @@ fit_configs:
       # ["gaussian"], ["gaussian"], ["gaussian"],
       # ["gaussian"], ["gaussian"], ["gaussian"],
       # ["gaussian"], ["gaussian"], ["gaussian"],
-      ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
-      ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
-      ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
-      ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"]
+      # ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
+      # ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
+      # ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"],
+      # ["doublecbsymm"], ["doublecbsymm"], ["doublecbsymm"]
+      ["doublecb"], ["doublecb"], ["doublecb"],
+      ["doublecb"], ["doublecb"], ["doublecb"],
+      ["doublecb"], ["doublecb"], ["doublecb"],
+      ["doublecb"], ["doublecb"], ["doublecb"]
     ]
     par_init_limit:
       - sigma:
@@ -47,14 +51,28 @@ fit_configs:
           fix_to_config_value: [false, false, false, false, false, false, false, false, false, false, false, false]
           fix_to_file: [false, false, false, false, false, false, false, false, false, false, false, false]
           fix_to_mb: [false, false, false, false, false, false, false, false, false, false, false, false]
-        alpha:
+        alphal:
           init: [1.40, 1.22, 1.39, 1.62, 1.59, 1.43, 1.47, 1.50, 1.50, 1.50, 1.50, 1.50]
           min: [0., 0., 0., 0., 0.5, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
           max: [5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.]
           fix_to_config_value: [false, false, false, false, false, false, false, false, false, false, false, false]
           fix_to_file: [false, false, false, false, false, false, false, false, false, false, false, false]
           fix_to_mb: [true, true, true, true, true, true, true, true, true, true, true, true]
-        n:
+        nl:
+          init: [23.75, 39.00, 5.67, 3.00, 3.07, 3.08, 3.09, 3.10, 3.11, 3.12, 3.13, 3.14]
+          min: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+          max: [100., 100., 100., 100., 100., 100., 100., 100., 100., 100., 100., 100.]
+          fix_to_config_value: [false, false, false, false, false, false, false, false, false, false, false, false]
+          fix_to_file: [false, false, false, false, false, false, false, false, false, false, false, false]
+          fix_to_mb: [true, true, true, true, true, true, true, true, true, true, true, true]
+        alphar:
+          init: [1.40, 1.22, 1.39, 1.62, 1.59, 1.43, 1.47, 1.50, 1.50, 1.50, 1.50, 1.50]
+          min: [0., 0., 0., 0., 0.5, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+          max: [5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 5.]
+          fix_to_config_value: [false, false, false, false, false, false, false, false, false, false, false, false]
+          fix_to_file: [false, false, false, false, false, false, false, false, false, false, false, false]
+          fix_to_mb: [true, true, true, true, true, true, true, true, true, true, true, true]
+        nr:
           init: [23.75, 39.00, 5.67, 3.00, 3.07, 3.08, 3.09, 3.10, 3.11, 3.12, 3.13, 3.14]
           min: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
           max: [100., 100., 100., 100., 100., 100., 100., 100., 100., 100., 100., 100.]
@@ -68,14 +86,17 @@ fit_configs:
     ratio_sigma_dplus_to_ds: [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85] # value, list or path to root_file. If null or empty, set dplus sigma to that of ds. Otherwise, set to ds sigma * value
   bkg:
     bkg_funcs: [
-      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
-      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
-      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2']
+      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
+      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
+      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2']
+      ['expo'], ['expo'], ['expo'], ['expo'],
+      ['expo'], ['expo'], ['expo'], ['expo'],
+      ['expo'], ['expo'], ['expo'], ['expo']
     ]
     use_bkg_templ: [
-      false, false, true, true,
-      true,  true,  true, true,
-      true,  true,  true, false
+      true, true, true, true,
+      true, true, true, true,
+      true, true, true, false
     ]
     templ_norm:
       fix_to_file: [
@@ -97,23 +118,23 @@ fit_configs:
       hist_name_for_fix: h_corr_bkg_over_dplus_signal_0_100
       backgrounds:
       - name: $\mathrm{D^{+}}\rightarrow K^{-}K^{+}\pi^{+}$
-        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
+        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/Dplus/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
         norm_hist_name: 'pt_{pt_min}_{pt_max}/DplusToPiKK/raw/hMassRaw'
-        template_file: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/wobkg_cut/templs_cent_{cent_min}_{cent_max}.root
+        template_file: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/Dplus/wobkg_cut/templs_cent_{cent_min}_{cent_max}.root
         template_hist_name: 'pt_{pt_min}_{pt_max}/DplusToPiKK/raw/hMassSmooth'
         br:
           pdg: 0.00961
           simulations: 0.42630385487528344
       - name: $\mathrm{D_s^{+}}\rightarrow K^{-}K^{+}\pi^{+}$
-        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
+        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/Dplus/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
         norm_hist_name: 'pt_{pt_min}_{pt_max}/DsToPiKK/raw/hMassRaw'
-        template_file: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/wobkg_cut/templs_cent_{cent_min}_{cent_max}.root
+        template_file: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/Dplus/wobkg_cut/templs_cent_{cent_min}_{cent_max}.root
         template_hist_name: 'pt_{pt_min}_{pt_max}/DsToPiKK/raw/hMassSmooth'
         br:
           pdg: 0.0544
           simulations: 1
       signal:
-        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
+        file_norm: /data/shared/CharmHadMassCalib/CorrBkgs/Distributions/Dplus/wbkg_cut/templs_cent_{cent_min}_{cent_max}.root
         hist_name: 'pt_{pt_min}_{pt_max}/DplusToPiKPi/raw/hMassRaw'
         br:
           pdg: 0.0931

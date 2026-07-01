@@ -173,7 +173,7 @@ def produce_chn_corrbkg(cfg_corrbkgs, df, outfile, chn_dir, templ_type='raw'):
     return histo_mass
 
 
-def produce_corr_bkgs_templs(cfg, sel_cfg, cent_diff_df, pt_bins):
+def produce_corr_bkgs_templs(cfg, sel_cfg, cent_diff_df, pt_bins, bdt_sel_bkg, bdt_sel_nonprompt):
 
     # Precompute final-state masks for all entries
     decay_masks = {}
@@ -185,21 +185,22 @@ def produce_corr_bkgs_templs(cfg, sel_cfg, cent_diff_df, pt_bins):
     outfile = TFile(f"{out_dir}/templs_cent_{sel_cfg['centrality'][0]}_{sel_cfg['centrality'][1]}.root", "RECREATE")
 
     # Loop over pt bins
+    print(f"length of dataframe: {len(cent_diff_df)}")
     for pt_min, pt_max in zip(pt_bins[:-1], pt_bins[1:]):
+        print(f"\nProducing correlated background templates for pt interval: [{pt_min}, {pt_max}) GeV/c")
         pt_key = f"pt_{int(pt_min*10)}_{int(pt_max*10)}"
-        pt_mask = (cent_diff_df.fPt >= pt_min) & (cent_diff_df.fPt < pt_max)
-        df_pt = cent_diff_df[pt_mask].reset_index(drop=True)  # pt-selected DataFrame
-
-        print(f"Processing pt bin: {pt_key}\n")
+        pt_bdt_mask = (cent_diff_df.fPt >= pt_min) & (cent_diff_df.fPt < pt_max) & \
+                      (cent_diff_df.fMlScore0 <= bdt_sel_bkg[pt_bins.index(pt_min)]) & \
+                      (cent_diff_df.fMlScore1 >= bdt_sel_nonprompt[pt_bins.index(pt_min)])
+        df_pt = cent_diff_df[pt_bdt_mask].reset_index(drop=True)  # pt-selected DataFrame
 
         # Loop over final states using precomputed masks
         for fin_state, decay_mask_full in decay_masks.items():
 
-            decay_pt_mask = decay_mask_full[pt_mask].reset_index(drop=True)
+            decay_pt_mask = decay_mask_full[pt_bdt_mask].reset_index(drop=True)
 
             # Apply pt mask
-            mask = pt_mask & decay_pt_mask
-            n_candidates = mask.sum()
+            n_candidates = decay_pt_mask.sum()
             if n_candidates <= cfg.get("min_entries", 0):
                 print(f"----> No candidates for final state: {fin_state}!")
                 continue
@@ -212,10 +213,22 @@ def produce_corr_bkgs_templs(cfg, sel_cfg, cent_diff_df, pt_bins):
             # Produce correlated backgrounds in a single pass per variant
             histo_mass = produce_chn_corrbkg(cfg, df_pt[decay_pt_mask], outfile, chn_dir, templ_type='raw')
 
+            # Centrality histogram
+            histo_cent = TH1F("hCentrality", "hCentrality", 101, -0.5, 100.5)
+            histo_score_bkg = TH1F("hScoreBkg", "hScoreBkg", 1000, 0, 1)
+            histo_score_fd = TH1F("hScoreFD", "hScoreFD", 1000, 0, 1)
+            for row in df_pt[decay_pt_mask].itertuples(index=False):
+                histo_cent.Fill(row.fCentrality)
+                histo_score_bkg.Fill(row.fMlScore0)
+                histo_score_fd.Fill(row.fMlScore1)
+
             # Scale histogram
             outfile.cd(chn_dir)
             histo_mass.Scale(1.0)
             histo_mass.Write('hMassScaled')
+            histo_cent.Write('hCentrality')
+            histo_score_bkg.Write('hScoreBkg')
+            histo_score_fd.Write('hScoreFD')
 
     outfile.Close()
 
@@ -251,7 +264,15 @@ if __name__ == "__main__":
     ]
     full_df = pd.concat(full_dfs, axis=1)
 
+    # Print unique fCentrality values for debugging
+    unique_centralities = full_df['fCentrality'].unique()
+
     for selection in config["selections"]:
-        print(f"Processing selection: {selection}")
         cent_diff_df = full_df.query(f"fCentrality >= {selection['centrality'][0]} and fCentrality < {selection['centrality'][1]}")
-        produce_corr_bkgs_templs(config, selection, cent_diff_df, selection["pt_intervals"])
+        produce_corr_bkgs_templs(config,
+                                 selection,
+                                 cent_diff_df,
+                                 selection["pt_intervals"],
+                                 selection.get("bdt_sel_bkg", [1.]*len(selection["pt_intervals"])),
+                                 selection.get("bdt_sel_nonprompt", [0.]*len(selection["pt_intervals"]))
+                                )
