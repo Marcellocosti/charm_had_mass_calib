@@ -69,12 +69,14 @@ class FitExecutor:  # pylint: disable=too-many-instance-attributes
             data: DataHandler,
             signal_functions: List[str],
             background_functions: List[str],
-            name: str
+            name: str,
+            particle: str
         ):
         self._data = data
         self._signal_functions = signal_functions
         self._bkg_functions = background_functions
         self._name = name
+        self._particle = particle
 
         self._fitter = None
 
@@ -107,6 +109,7 @@ class FitExecutor:  # pylint: disable=too-many-instance-attributes
             self._correlated_bkg_labels.append(
                 f"correlated background {len(self._correlated_bkg_data_hdl)}"
             )
+        print(f"Appending correlated background with label '{self._correlated_bkg_labels[-1]}', fix={fix}, norm={norm}, fix_to_signal={fix_to_signal}")
         self._fix_correlated_bkg_to_sng.append(fix_to_signal)
 
     def set_parameter(
@@ -160,7 +163,13 @@ class FitExecutor:  # pylint: disable=too-many-instance-attributes
 
         name_background_pdf = ["hist" for _ in self._correlated_bkg_data_hdl] + self._bkg_functions
 
-        label_signal_pdfs = [r"$\mathrm{D_{s}^{+}}$ signal", r"$\mathrm{D^{+}}$ signal"]
+        if self._particle == "ds":
+            label_signal_pdfs = [r"$\mathrm{D_{s}^{+}}$ signal", r"$\mathrm{D^{+}}$ signal"]
+        elif self._particle == "dplus":
+            label_signal_pdfs = [r"$\mathrm{D^{+}}$ signal"]
+        else:
+            print(f"Unknown particle type: {self._particle}. Exiting!")
+            exit(1)
         label_bkg_pdfs = self._correlated_bkg_labels + ["Combinatorial background"]
 
         self._fitter = F2MassFitter(
@@ -228,7 +237,7 @@ class FitExecutor:  # pylint: disable=too-many-instance-attributes
                 if self._fix_correlated_bkg[i]:
                     self._fitter.fix_bkg_frac_to_signal_pdf(
                         i,
-                        self._fix_correlated_bkg_to_sng[i],
+                        self._fix_correlated_bkg_to_sng[i] if self._particle == "ds" else 0,
                         self._correlated_bkg_norm[i]
                     )
 

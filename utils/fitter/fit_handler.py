@@ -58,6 +58,7 @@ class CorrelatedBackgroundConfig:  # pylint: disable=too-many-instance-attribute
 @dataclasses.dataclass(frozen=True)
 class FitConfig:  # pylint: disable=too-many-instance-attributes
     """A standardized config object that FitHandler understands."""
+    particle: str
     pt_min: float
     pt_max: float
     cent_min: List[int] | None
@@ -150,7 +151,7 @@ class FitHandler():  # pylint: disable=too-few-public-methods
         text += "\n\n"
         text += xspace
         text += fr"{self._cfg.pt_min:.0f} < $p_{{\mathrm{{T}}}}$ < {self._cfg.pt_max:.0f} "
-        text += r"GeV/$c$, $|y|$ < 0.5""\n"
+        text += r"GeV/$c$, $|y|$ < 0.8""\n"
         if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
             text += xspace + fr"{self._cfg.cent_min:.0f}% < Cent. < {self._cfg.cent_max:.0f}%""\n"
 
@@ -159,7 +160,13 @@ class FitHandler():  # pylint: disable=too-few-public-methods
 
     def _draw_figures(self):
         loc = ["lower left", "upper left"]
-        ax_title = r"$M(\mathrm{KK\pi})$ GeV$/c^2$"
+        if self._cfg.particle == "ds":
+            ax_title = r"$M(\mathrm{K\pi\pi})$ GeV$/c^2$"
+        elif self._cfg.particle == "dplus":
+            ax_title = r"$M(\mathrm{K\pi\pi})$ GeV$/c^2$"
+        else:
+            print(f"Unknown particle type: {self._cfg.particle}. Exiting!")
+            exit(1)
         fig, ax = self._fitter.plot_mass_fit(
             style="ATLAS",
             show_extra_info=True,
@@ -174,9 +181,9 @@ class FitHandler():  # pylint: disable=too-few-public-methods
         )
 
         for frmt in self._cfg.draw_formats:
-            suffix = f"_{self._cfg.pt_min * 10:.0f}_{self._cfg.pt_max * 10:.0f}_"
+            suffix = f"{self._cfg.pt_min * 10:.0f}_{self._cfg.pt_max * 10:.0f}"
             if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
-                suffix += f"cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}_"
+                suffix += f"_cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}"
             suffix += self._cfg.fig_suffix
 
             if frmt == "root":
@@ -185,8 +192,8 @@ class FitHandler():  # pylint: disable=too-few-public-methods
                     option="recreate", suffix=suffix, num=5000
                 )
             else:
-                fig.savefig(f"{self._cfg.output_dir}/fit_mass_pt{suffix}.{frmt}")
-                figres.savefig(f"{self._cfg.output_dir}/fit_massres_pt{suffix}.{frmt}")
+                fig.savefig(f"{self._cfg.output_dir}/fit_mass_pt_{suffix}.{frmt}")
+                figres.savefig(f"{self._cfg.output_dir}/fit_massres_pt_{suffix}.{frmt}")
             plt.close(fig)
             plt.close(figres)
 
@@ -221,11 +228,11 @@ class FitHandler():  # pylint: disable=too-few-public-methods
 
         data_hdl = self._get_data_handler()
 
-        fit_name = f"ds_pt_{self._cfg.pt_min*10:.0f}_{self._cfg.pt_max*10:.0f}"
+        fit_name = f"{self._cfg.particle}_pt_{self._cfg.pt_min*10:.0f}_{self._cfg.pt_max*10:.0f}"
         if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
             fit_name += f"_cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}"
 
-        executor = FitExecutor(data_hdl, self._cfg.signal_pdfs, self._cfg.bkg_pdfs, fit_name)
+        executor = FitExecutor(data_hdl, self._cfg.signal_pdfs, self._cfg.bkg_pdfs, fit_name, self._cfg.particle)
 
         self._set_parameters(executor)
 
@@ -355,12 +362,12 @@ class FitHandler():  # pylint: disable=too-few-public-methods
                 limits=self._cfg.mass_range,
                 rebin=self._cfg.rebin
             )
-
-            return data_bkg_reference.get_norm() * \
-                   bkg.br.pdg / bkg.br.simulations / \
-                   (data_signal_reference.get_norm() * \
-                   self._cfg.correlated_bkg.signal_br.pdg / \
-                   self._cfg.correlated_bkg.signal_br.simulations)
+            norm_factor = data_bkg_reference.get_norm() * \
+                          bkg.br.pdg / bkg.br.simulations / \
+                          (data_signal_reference.get_norm() * \
+                          self._cfg.correlated_bkg.signal_br.pdg / \
+                          self._cfg.correlated_bkg.signal_br.simulations)
+            return norm_factor
 
         return None
 

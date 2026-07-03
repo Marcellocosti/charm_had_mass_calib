@@ -1,7 +1,9 @@
 inputs:
   # Root directory containing per-centrality, per-year MassDistributions.root files,
   # e.g. <data_dir>/cent_0_20/2024/MassDistributions.root.
-  data_dir: "/home/fchinu/Run3/charm_had_mass_calib/data/Ds"
+  data_dir: "/data/shared/CharmHadMassCalib/preprocess/Ds"
+
+particle: "ds"
 
 max_workers: 10
 
@@ -94,7 +96,7 @@ fit_configs:
 
 output:
   # Per (cent, year) outputs land in <directory>/<cent_X_Y>_<YEAR>/.
-  directory: "/home/fchinu/Run3/charm_had_mass_calib/fit/output/Ds"
+  directory: "/data/shared/CharmHadMassCalib/outputs/Ds"
   suffix: ""
   save_all_fits: true
-  formats: ["png", "pdf", "root"]
+  formats: ["pdf", "root"]

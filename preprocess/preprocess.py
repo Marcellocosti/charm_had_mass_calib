@@ -52,7 +52,7 @@ def get_input_paths(year_input):
         sys.exit(1)
 
 
-def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_combinations):
+def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_combinations, bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt, pt_intervals):
     """
     Process a single sparse from an input file for all pt bins according to the configuration.
 
@@ -65,6 +65,7 @@ def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_comb
         sparse_cfg (dict): sparse configuration dictionary
         out_dir (str): output directory for pre-processed files
         occ_pt_combinations (list): list of occupancy and pt combinations
+        bdt_sels (list): list of BDT bkg score selections
     """
 
     infile = TFile.Open(infile_path, 'read')
@@ -81,6 +82,16 @@ def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_comb
     out_file = TFile(f'{out_file_dir}/AnalysisResults_{i_file}.root', 'recreate')
 
     for (occ_min, occ_max), (pt_min, pt_max) in occ_pt_combinations:
+        # Retrieve pt bin idx
+        if bdt_sels_bkg is not None:
+            bkg_max_cut = bdt_sels_bkg[pt_intervals.index(pt_min)]
+            sparse.GetAxis(sparse_dict['ScoreBkg']).SetRangeUser(0, bkg_max_cut)
+        if bdt_sels_prompt is not None:
+            prompt_max_cut = bdt_sels_prompt[pt_intervals.index(pt_min)]
+            sparse.GetAxis(sparse_dict['ScorePrompt']).SetRangeUser(0, prompt_max_cut)
+        if bdt_sels_nonprompt is not None:
+            nonprompt_max_cut = bdt_sels_nonprompt[pt_intervals.index(pt_min)]
+            sparse.GetAxis(sparse_dict['ScoreFD']).SetRangeUser(0, nonprompt_max_cut)
         sparse.GetAxis(sparse_dict['Pt']).SetRangeUser(pt_min, pt_max)
         sparse.GetAxis(sparse_dict['Occ']).SetRangeUser(occ_min, occ_max)
         proj_sparse = sparse.Projection(sparse_dict['ScoreBkg'], sparse_dict['Mass'], 'O')
@@ -122,6 +133,9 @@ if __name__ == "__main__":
             # Loop over the different years
             for year, files in hadron_cfg['Inputs'].items():
                 file_paths = get_input_paths(files)
+                bdt_sels_bkg = sel_cfg.get('BdtSelsBkg', {}).get(year, None)
+                bdt_sels_prompt = sel_cfg.get('BdtSelsPrompt', {}).get(year, None)
+                bdt_sels_nonprompt = sel_cfg.get('BdtSelsNonPrompt', {}).get(year, None)
 
                 if file_paths is None:
                     logger(f"No matching centrality found for input, skipping!", "ERROR")
@@ -131,8 +145,10 @@ if __name__ == "__main__":
                 os.makedirs(out_dir, exist_ok=True)
                 logger(f"##### Skimming centrality {centrality}, year {year} #####", "WARNING")
                 with concurrent.futures.ThreadPoolExecutor(args.workers) as executor:
-                    tasks_sparses = [executor.submit(process_sparse, hadron_cfg['Name'], centrality, i_file, 
-                                                     file, out_dir, occ_pt_combinations) 
+                    tasks_sparses = [executor.submit(process_sparse, hadron_cfg['Name'], centrality,
+                                                     i_file, file, out_dir, occ_pt_combinations,
+                                                     bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt,
+                                                     sel_cfg["PtIntervals"]) 
                                      for i_file, file in enumerate(file_paths)]
                 # Throw exceptions
                 for task in tasks_sparses:

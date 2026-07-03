@@ -53,14 +53,17 @@ def fitconfig_to_dict(cfg: FitConfig) -> dict:
     return {f"{k}_cfg": v for k, v in base.items()}
 
 
-def discover_input_files(base_dir: str) -> Dict[str, List[Dict]]:
+def discover_input_files(cfg: Dict) -> Dict[str, List[Dict]]:
     """Find every ``MassDistributions.root`` under ``base_dir/cent_*/<year>/``.
 
     Intermediate ``jobs/`` outputs are ignored. Files are grouped by year so a
     single per-year pipeline can run a centrality-integrated fit followed by
     the per-centrality fits.
     """
+    base_dir = cfg["inputs"]["data_dir"]
     base_dir = os.path.expanduser(base_dir)
+    skip_years = cfg["inputs"].get("skip_years", [])
+    skip_cents = cfg["inputs"].get("skip_cents", [])
     by_year: Dict[str, List[Dict]] = {}
     for cent_dir in sorted(glob.glob(os.path.join(base_dir, "cent_*"))):
         m_cent = CENT_DIR_RE.match(os.path.basename(cent_dir))
@@ -68,7 +71,13 @@ def discover_input_files(base_dir: str) -> Dict[str, List[Dict]]:
             continue
         cent_min = int(m_cent.group("cmin"))
         cent_max = int(m_cent.group("cmax"))
+        if [cent_min, cent_max] in skip_cents:
+            print(f"Skipping centrality {cent_min}-{cent_max} as requested in config")
+            continue
         for year_name in sorted(os.listdir(cent_dir)):
+            if year_name in skip_years:
+                print(f"Skipping year {year_name} as requested in config")
+                continue
             mass_file = os.path.join(cent_dir, year_name, "MassDistributions.root")
             if not os.path.isfile(mass_file):
                 continue
@@ -251,13 +260,21 @@ def run_fit(fit_config: FitConfig) -> Tuple[FitConfig, Dict]:
     return fit_config, results
 
 
-def get_corr_bkg_config(cfg: Dict, i_pt: int) -> CorrelatedBackgroundConfig:
+def get_corr_bkg_config(cfg: Dict, i_pt: int, pt_min: float, pt_max: float, cent_min: float, cent_max: float) -> CorrelatedBackgroundConfig:
     """Create a CorrelatedBackgroundConfig object based on the provided configuration."""
     bkg_cfg = cfg["fit_configs"]["bkg"]
     if not bkg_cfg["use_bkg_templ"][i_pt]:
         return None
 
     bkg_norm = bkg_cfg["templ_norm"]
+
+    # Print all file_norm paths
+    for bkg in bkg_norm["backgrounds"]:
+        file_norm_path = bkg["file_norm"].format(
+            cent_min=int(cent_min),
+            cent_max=int(cent_max),
+        )
+        print(f"Background: {bkg['name']}, file_norm path: {file_norm_path}")
 
     return CorrelatedBackgroundConfig(
         fix_to_file=bkg_norm["fix_to_file"][i_pt],
@@ -268,16 +285,42 @@ def get_corr_bkg_config(cfg: Dict, i_pt: int) -> CorrelatedBackgroundConfig:
         backgrounds=[
             CorrelatedBackground(
                 name=bkg["name"],
-                file_norm=bkg["file_norm"],
-                norm_hist_name=bkg["norm_hist_name"],
-                template_file=bkg["template_file"],
-                template_hist_name=bkg["template_hist_name"],
+                file_norm=bkg["file_norm"].format(
+                    cent_min=int(cent_min),
+                    cent_max=int(cent_max),
+                ),
+                norm_hist_name=bkg["norm_hist_name"].format(
+                    cent_min=int(cent_min),
+                    cent_max=int(cent_max),
+                    pt_min=f"{pt_min*10:.0f}",
+                    pt_max=f"{pt_max*10:.0f}"
+                ),
+                template_file=bkg["template_file"].format(
+                    cent_min=int(cent_min),
+                    cent_max=int(cent_max),
+                ),
+                template_hist_name=bkg["template_hist_name"].format(
+                    cent_min=int(cent_min),
+                    cent_max=int(cent_max),
+                    pt_min=f"{pt_min*10:.0f}",
+                    pt_max=f"{pt_max*10:.0f}"
+                ),
                 br=BRInfo(pdg=bkg["br"]["pdg"], simulations=bkg["br"]["simulations"])
             )
             for bkg in bkg_norm["backgrounds"]
         ],
-        signal_norm_file=bkg_norm["signal"]["file_norm"],
-        signal_hist_name=bkg_norm["signal"]["hist_name"],
+        signal_norm_file=bkg_norm["signal"]["file_norm"].format(
+                             cent_min=int(cent_min),
+                             cent_max=int(cent_max),
+                             pt_min=f"{pt_min*10:.0f}",
+                             pt_max=f"{pt_max*10:.0f}"
+                         ),
+        signal_hist_name=bkg_norm["signal"]["hist_name"].format(
+                             cent_min=int(cent_min),
+                             cent_max=int(cent_max),
+                             pt_min=f"{pt_min*10:.0f}",
+                             pt_max=f"{pt_max*10:.0f}"
+                         ),
         signal_br=BRInfo(
             pdg=bkg_norm["signal"]["br"]["pdg"],
             simulations=bkg_norm["signal"]["br"]["simulations"]
@@ -353,6 +396,7 @@ def get_config(
         ratio_sigma_dplus_to_ds = cfg["fit_configs"]["signal"]["ratio_sigma_dplus_to_ds"]
 
     return FitConfig(
+        particle=cfg["particle"],
         pt_min=pt_min,
         pt_max=pt_max,
         cent_min=cent_min,
@@ -370,7 +414,7 @@ def get_config(
         suffix_hist_for_params_fix=cfg["fit_configs"]["signal"]["suffix_hist_for_params_fix"],
         fix_dplus_sigma_to_ds=cfg["fit_configs"]["signal"]["fix_sigma_dplus_to_ds"][i_pt],
         ratio_sigma_dplus_to_ds=ratio_sigma_dplus_to_ds,
-        correlated_bkg=get_corr_bkg_config(cfg, i_pt),
+        correlated_bkg=get_corr_bkg_config(cfg, i_pt, pt_min, pt_max, cent_min, cent_max),
         draw_figures=cfg["output"]["save_all_fits"],
         draw_formats=cfg["output"]["formats"],
         output_dir=os.path.join(os.path.expanduser(cfg["output"]["directory"]), "fits"),
@@ -460,26 +504,31 @@ def fit_one_year(  # pylint: disable=too-many-locals
     cent_ranges = [(e["cent_min"], e["cent_max"]) for e in year_entries]
 
     # 1) Centrality-integrated (MB-like) pass.
-    integrated_results = _run_pass(
-        [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax))
-         for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))],
-        max_workers, f"{year} integrated"
-    )
+    if base_cfg.get("skip_cent_integrated"):
+        integrated_results = {}
+    else:
+        integrated_results = _run_pass(
+            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax))
+            for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))],
+            max_workers, f"{year} integrated"
+        )
 
-    # 2) Integrated re-fit with D+ sigma fixed to ratio * Ds sigma where requested.
-    integrated_results.update(_run_pass(
-        [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax),
-                    None, integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1])
-         for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))
-         if sig_cfg["fix_sigma_dplus_to_ds"][i]],
-        max_workers, f"{year} integrated (dplus sigma)"
-    ))
+        # 2) Integrated re-fit with D+ sigma fixed to ratio * Ds sigma where requested.
+        integrated_results.update(_run_pass(
+            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax),
+                        None, integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1])
+            for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))
+            if sig_cfg["fix_sigma_dplus_to_ds"][i]],
+            max_workers, f"{year} integrated (dplus sigma)"
+        ))
 
     # 3) Per-centrality fits using integrated results to fix params (fix_to_mb).
     per_cent_subs = []
     for cent_min, cent_max in cent_ranges:
         for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs)):
-            mb_res = integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1]
+            mb_res = None
+            if (pt_min, pt_max, int_cmin, int_cmax) in integrated_results:
+                mb_res = integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1]
             per_cent_subs.append(
                 get_config(file_cfg, (i, pt_min, pt_max), (cent_min, cent_max), mb_res)
             )
@@ -516,7 +565,7 @@ def fit(config_file_name):
     base_output_dir = os.path.expanduser(cfg["output"]["directory"])
     os.makedirs(base_output_dir, exist_ok=True)
 
-    by_year = discover_input_files(cfg["inputs"]["data_dir"])
+    by_year = discover_input_files(cfg)
     if not by_year:
         raise RuntimeError(
             f"No MassDistributions.root files found under {cfg['inputs']['data_dir']}"

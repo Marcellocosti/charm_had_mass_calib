@@ -15,7 +15,7 @@ def get_files_from_directory(input_directory, run, is_slim, load_merged_runs):
     Function to get all the files from a specific directory
     """
 
-
+    print(f"Getting files from alien://{input_directory} for run {run}...")
     if is_slim or load_merged_runs:
         os.system(f"alien_find alien://{input_directory} "
                   f"AnalysisResults.root -r > outputs_{run}.txt")
@@ -82,7 +82,7 @@ def download_and_merge(input_file, num_workers, suffix, n_merged_files, is_slim,
             parts = line.strip().split(',')
             for part in parts:
                 output_directories.append(part)
-
+    print(f"Found output_directories: {output_directories} in {input_file}")
     num_workers = min(num_workers, os.cpu_count())  # Get the number of available CPU cores)
 
     # Get the runs from the runs file
@@ -132,9 +132,9 @@ def download_and_merge(input_file, num_workers, suffix, n_merged_files, is_slim,
     files = glob.glob("./run_*/AnalysisResults*.root")
     try:
         os.system(f"hadd -f AnalysisResults{suffix}.root {' '.join(files)}")
-        os.system(f"rm -r run_*")
-        os.system(f"rm outputs_run_*")
-        os.system(f"rm files_to_merge_*")
+        # os.system(f"rm -r run_*")
+        # os.system(f"rm outputs_run_*")
+        # os.system(f"rm files_to_merge_*")
     except Exception as e:
         print(f"Error occurred while merging files: {e}")
 
