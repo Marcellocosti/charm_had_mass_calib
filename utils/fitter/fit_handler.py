@@ -175,10 +175,11 @@ class FitHandler():  # pylint: disable=too-few-public-methods
             axis_title=ax_title
         )
         self._add_info_on_canvas(ax, "center right")
-        figres = self._fitter.plot_raw_residuals(
+        figres, axres = self._fitter.plot_raw_residuals(
             figsize=(8, 8), style="ATLAS",
             extra_info_loc=loc, axis_title=ax_title
         )
+        self._add_info_on_canvas(axres, "center right")
 
         for frmt in self._cfg.draw_formats:
             suffix = f"{self._cfg.pt_min * 10:.0f}_{self._cfg.pt_max * 10:.0f}"

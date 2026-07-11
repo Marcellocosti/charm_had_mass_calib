@@ -11,6 +11,7 @@ into a sibling ``projections.root`` that the fitter consumes.
 import argparse
 import copy
 import glob
+import itertools
 import re
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import dataclasses
@@ -39,6 +40,15 @@ from fit_handler import (
 from hist_handler import HistHandler
 
 # pylint: disable=no-member  # (ROOT dynamic members)
+
+# Detach in-memory histograms from the current ROOT directory so name clashes
+# never trigger "replacing existing TH1" deletions (clones survive file closes).
+ROOT.TH1.AddDirectory(False)
+
+# Monotonic counter for globally-unique in-memory histogram names. Using id() is
+# unsafe: it is reused for new objects after old ones are freed, which collided
+# clone names across input files and aliased centralities together.
+_HIST_UID = itertools.count()
 
 H2D_NAME_RE = re.compile(
     r"^h2D_[^_]+_Occ_(?P<occ_min>[\d.]+)_(?P<occ_max>[\d.]+)"
@@ -110,7 +120,7 @@ def _load_h2_per_pt(input_path: str) -> Dict[Tuple[float, float], "ROOT.TH2"]:
         if bin_key in summed:
             summed[bin_key].Add(h2)
         else:
-            clone = h2.Clone(f"_sum_{pt_min}_{pt_max}_{id(h2)}")
+            clone = h2.Clone(f"_sum_{pt_min}_{pt_max}_{next(_HIST_UID)}")
             clone.SetDirectory(0)
             summed[bin_key] = clone
     f_in.Close()
@@ -152,7 +162,7 @@ def project_year(
             if pt_key in integrated:
                 integrated[pt_key].Add(h2)
             else:
-                clone = h2.Clone(f"_int_{pt_key[0]}_{pt_key[1]}")
+                clone = h2.Clone(f"_int_{pt_key[0]}_{pt_key[1]}_{next(_HIST_UID)}")
                 clone.SetDirectory(0)
                 integrated[pt_key] = clone
 
