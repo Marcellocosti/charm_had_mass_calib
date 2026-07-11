@@ -202,9 +202,12 @@ class FitExecutor:  # pylint: disable=too-many-instance-attributes
         """Initialize all signal and background parameters."""
 
         # Signal parameters
+        mass_limits = self._data.get_limits()
         for idx, signal_func in enumerate(self._signal_functions):
             particle = "ds" if idx == 0 else "dplus"
-            self._fitter.set_particle_mass(idx, pdg_id=PDG_IDS[particle])
+            self._fitter.set_particle_mass(
+                idx, pdg_id=PDG_IDS[particle], limits=mass_limits
+            )
             if signal_func in SIGNAL_DEFAULTS:
                 for name, defaults in SIGNAL_DEFAULTS[signal_func].items():
                     param, value, min_val, max_val, fix = self._get_param_settings(

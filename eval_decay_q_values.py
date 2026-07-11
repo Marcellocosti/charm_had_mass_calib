@@ -4,7 +4,7 @@ import ROOT
 from ROOT import TFile
 from array import array
 from ROOT import TMultiGraph, TGraphErrors
-from utils.plot_utils import set_figure_style, make_canvas, make_legend, set_graph_style, set_plot_style
+from utils.plot_utils import set_figure_style, make_canvas, make_legend, set_graph_style, set_plot_style, set_fit_style
 from utils.load_utils import get_d0_lc_results, get_dplus_ds_results, MASSES_PDG
 
 set_figure_style()
@@ -157,12 +157,12 @@ Q_VALUE_CDEUTERON_DKPI = MASS_CDEUTERON - MASS_DEUTERON - MASS_K - MASS_PI
 
 QVALUES = {"D0": Q_VALUE_DZERO_KPI, "DplusKPiPi": Q_VALUE_DPLUS_KPIPI, "DplusKKPi": Q_VALUE_DPLUS_KKPI, "Ds": Q_VALUE_DS_KKPI, "Lc": Q_VALUE_LC_PKPIPI}
 
-print(f"Q-value for D+ -> K- pi+ pi+: {Q_VALUE_DPLUS_KPIPI:.5f} GeV/c^2")
-print(f"Q-value for D+ -> K- K+ pi+: {Q_VALUE_DPLUS_KKPI:.5f} GeV/c^2")
-print(f"Q-value for D0 -> K- pi+: {Q_VALUE_DZERO_KPI:.5f} GeV/c^2")
-print(f"Q-value for Ds -> K- K+ pi+: {Q_VALUE_DS_KKPI:.5f} GeV/c^2")
-print(f"Q-value for Lambda_c -> p- K- pi+: {Q_VALUE_LC_PKPIPI:.5f} GeV/c^2")
 print(f"Q-value for C-deuteron -> d K- pi+: {Q_VALUE_CDEUTERON_DKPI:.5f} GeV/c^2")
+print(f"Q-value for Lambda_c -> p- K- pi+: {Q_VALUE_LC_PKPIPI:.5f} GeV/c^2")
+print(f"Q-value for D+ -> K- K+ pi+: {Q_VALUE_DPLUS_KKPI:.5f} GeV/c^2")
+print(f"Q-value for Ds -> K- K+ pi+: {Q_VALUE_DS_KKPI:.5f} GeV/c^2")
+print(f"Q-value for D+ -> K- pi+ pi+: {Q_VALUE_DPLUS_KPIPI:.5f} GeV/c^2")
+print(f"Q-value for D0 -> K- pi+: {Q_VALUE_DZERO_KPI:.5f} GeV/c^2")
 
 
 # PLOTS OF MEAN, SIGMA, AND SHIFTS VS PT FOR DIFFERENT PARTICLES AND YEARS
@@ -316,6 +316,9 @@ for plot_name, plot_cfg in plot_cfgs.items():
                 "uncs": uncs,
             }
 
+    cd_extrap_vs_pt = {}
+    lc_extrap_vs_pt = {}
+
     for ipt, (ptmin, ptmax) in enumerate(zip(pt_bins[:-1], pt_bins[1:])):
 
         c = make_canvas(f"{plot_name}_{ipt}")
@@ -323,6 +326,10 @@ for plot_name, plot_cfg in plot_cfgs.items():
 
         mg = TMultiGraph()
         keep = []
+        lin_fits = []
+        fit_res = []
+        cd_extrap = []
+        lc_extrap = []
 
         for year in YEARS:
 
@@ -342,6 +349,8 @@ for plot_name, plot_cfg in plot_cfgs.items():
             ey = [ey[i] for i in sorted_indices]
 
             g = TGraphErrors(len(x), array("d", x), array("d", y), array("d", ex), array("d", ey))
+            lin_fits.append(ROOT.TF1(f"lin_fit_{year}", "pol1", Q_VALUE_DPLUS_KKPI - 0.01, Q_VALUE_DZERO_KPI + 0.1))
+            fit_res.append(g.Fit(lin_fits[-1], "R0S"))  # Fit with a linear function, suppress output
             set_graph_style(g, year)
             mg.Add(g)
             keep.append(g)
@@ -354,7 +363,79 @@ for plot_name, plot_cfg in plot_cfgs.items():
         set_plot_style(mg, xtitle="Q value (GeV/#it{c}^{2})", variable="shift",
                        labels=AXIS_LABELS, cent_class=cent_class, pt_range=(ptmin, ptmax))
 
+        for fit, year in zip(lin_fits, YEARS):
+            set_fit_style(fit, year)
+            fit.DrawClone("same")
+
+            fit.SetRange(Q_VALUE_CDEUTERON_DKPI - 0.01, Q_VALUE_DZERO_KPI + 0.1)
+            fit.SetLineStyle(ROOT.kDashed)
+            fit.DrawClone("same")
+
+            xarr = array("d", [Q_VALUE_CDEUTERON_DKPI, Q_VALUE_LC_PKPIPI])
+            cierr = array("d", [0.0, 0.0])
+            fit_res[-1].GetConfidenceIntervals(2, 1, 1, xarr, cierr, 0.683, False)
+            cd_err = cierr[0]
+            lc_err = cierr[1]
+
+            cd_extrap.append((fit.Eval(Q_VALUE_CDEUTERON_DKPI), cd_err))
+            lc_extrap.append((fit.Eval(Q_VALUE_LC_PKPIPI), lc_err))
+
+        frame = c.GetFrame()
+        cd_line = ROOT.TLine(Q_VALUE_CDEUTERON_DKPI, frame.GetY1(), Q_VALUE_CDEUTERON_DKPI, frame.GetY2())
+        cd_line.SetLineColor(ROOT.kGray + 2)
+        cd_line.SetLineStyle(ROOT.kDashed)
+        cd_line.Draw("same")
+
+        cd_text = ROOT.TLatex(Q_VALUE_CDEUTERON_DKPI + 0.002, c.GetUymax() - 0.5, "cd Q-value")
+        cd_text.SetTextFont(42)
+        cd_text.SetTextSize(0.035)
+        cd_text.SetTextColor(ROOT.kGray + 2)
+        cd_text.Draw("same")
+
         leg.Draw()
 
         c.SaveAs(f"{BASEPATH}/final_plots/calib_mass/calib_{plot_name}_{ptmin}_{ptmax}.pdf")
+
+        cd_shift = ROOT.TGraphErrors(3)
+        for i, (year, val) in enumerate(zip(YEARS, cd_extrap)):
+            cd_shift.SetPoint(i, int(year), val[0])
+            cd_shift.SetPointError(i, 0, val[1])
+        cd_shift.SetTitle(";Year;Mass shift (MeV/#it{c}^{2})")
+        cd_shift.SetName(f"cd_shift_vs_year_{cent_class}_{ptmin}_{ptmax}")
+        cd_shift.Write()
+
+        lc_shift = ROOT.TGraphErrors(3)
+        for i, (year, val) in enumerate(zip(YEARS, lc_extrap)):
+            lc_shift.SetPoint(i, int(year), val[0])
+            lc_shift.SetPointError(i, 0, val[1])
+        lc_shift.SetTitle(";Year;Mass shift (MeV/#it{c}^{2})")
+        lc_shift.SetName(f"lc_shift_vs_year_{cent_class}_{ptmin}_{ptmax}")
+        lc_shift.Write()
+
+        for y in YEARS:
+            if y not in cd_extrap_vs_pt:
+                cd_extrap_vs_pt[y] = []
+                lc_extrap_vs_pt[y] = []
+            cd_extrap_vs_pt[y].append(cd_extrap[YEARS.index(y)])
+            lc_extrap_vs_pt[y].append(lc_extrap[YEARS.index(y)])
+
+    for y in YEARS:
+        n_pt = len(pt_bins) - 1
+        pt_x = array("d", pt_bins[:-1])
+        pt_ex = array("d", [0.0] * n_pt)
+
+        cd_vals = array("d", [v[0] for v in cd_extrap_vs_pt[y]])
+        cd_errs = array("d", [v[1] for v in cd_extrap_vs_pt[y]])
+        cd_extrap_graph = ROOT.TGraphErrors(n_pt, pt_x, cd_vals, pt_ex, cd_errs)
+        cd_extrap_graph.SetTitle(f"cd_shift_vs_pt_{cent_class}_{y};#it{{p}}_{{T}} (GeV/#it{{c}});Mass shift (MeV/#it{{c}}^{{2}})")
+        cd_extrap_graph.SetName(f"cd_shift_vs_pt_{cent_class}_{y}")
+        cd_extrap_graph.Write()
+
+        lc_vals = array("d", [v[0] for v in lc_extrap_vs_pt[y]])
+        lc_errs = array("d", [v[1] for v in lc_extrap_vs_pt[y]])
+        lc_extrap_graph = ROOT.TGraphErrors(n_pt, pt_x, lc_vals, pt_ex, lc_errs)
+        lc_extrap_graph.SetTitle(f"lc_shift_vs_pt_{cent_class}_{y};#it{{p}}_{{T}} (GeV/#it{{c}});Mass shift (MeV/#it{{c}}^{{2}})")
+        lc_extrap_graph.SetName(f"lc_shift_vs_pt_{cent_class}_{y}")
+        lc_extrap_graph.Write()
+
 out_file_vs_qvalue.Close()
