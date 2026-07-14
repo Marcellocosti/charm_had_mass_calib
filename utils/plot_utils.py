@@ -36,7 +36,7 @@ def set_figure_style():
     gStyle.SetTitleSize(0.048, "XYZ")
 
     gStyle.SetTitleOffset(1.15, "X")
-    gStyle.SetTitleOffset(1.45, "Y")
+    gStyle.SetTitleOffset(1.50, "Y")
 
 
 # Canvas
@@ -44,8 +44,8 @@ def make_canvas(name):
 
     c = TCanvas(name, "", 700, 650)
 
-    c.SetLeftMargin(0.14)
-    c.SetRightMargin(0.04)
+    c.SetLeftMargin(0.16)
+    c.SetRightMargin(0.02)
     c.SetBottomMargin(0.13)
     c.SetTopMargin(0.05)
 
@@ -75,8 +75,14 @@ def set_graph_style(g, year):
     g.SetLineWidth(2)
 
 
+def set_fit_style(g, year):
+
+    g.SetLineColor(colors[year])
+    g.SetLineWidth(2)
+
+
 # Draw decorations
-def set_plot_style(mg, xtitle, variable, labels, particle=None, cent_class=None, pt_range=None, title=None):
+def set_plot_style(mg, xtitle, variable, labels, particle=None, ytitleoffset=1.70):
 
     mg.Draw("AP")
 
@@ -101,7 +107,7 @@ def set_plot_style(mg, xtitle, variable, labels, particle=None, cent_class=None,
     y.SetLabelSize(0.042)
 
     x.SetTitleOffset(1.15)
-    y.SetTitleOffset(1.45)
+    y.SetTitleOffset(ytitleoffset)
 
     ROOT.gPad.Update()
 
@@ -135,16 +141,5 @@ def set_plot_style(mg, xtitle, variable, labels, particle=None, cent_class=None,
         line.Draw()
 
         objects.append(line)
-
-    latex = ROOT.TLatex()
-    ypos = 0.87
-    if cent_class:
-        latex.DrawLatex(0.18, ypos, f"Centrality {cent_class.replace('_','-')}%")
-        ypos -= 0.05
-
-    if pt_range:
-        latex.DrawLatex(0.18, ypos, f"{pt_range[0]} < #it{{p}}_{{T}} < {pt_range[1]} GeV/#it{{c}}")
-
-    objects.append(latex)
 
     return objects

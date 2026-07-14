@@ -1,0 +1,53 @@
+PreprocessOutDir: '/data/shared/CharmHadMassCalib/preprocess/OccDiff'
+
+CharmHadrons:
+-   Name: 'Dplus'
+    Inputs:
+        '2023':
+            '0_20': '/data/shared/CharmHadMassCalib/inputs/2023/020/Train686953/AnalysisResultsHF_LHC23_PbPb_pass4_full_2P3PDstar_020.root'
+            '20_50': '/data/shared/CharmHadMassCalib/inputs/2023/2050/Train686952/AnalysisResultsHF_LHC23_PbPb_pass4_full_2P3PDstar_2050.root'
+        '2024':
+            '0_20': '/data/shared/CharmHadMassCalib/inputs/2024/020/Train686956/AnalysisResultsHF_LHC24_PbPb_pass4_full_2P3PDstar_020.root'
+            '20_50': '/data/shared/CharmHadMassCalib/inputs/2024/2050/Train686965/AnalysisResults_HF_LHC24_PbPb_pass3_2P3PDstar_2050.root'
+        '2025':
+            '0_20': '/data/shared/CharmHadMassCalib/inputs/2025/020/Train686962/AnalysisResultsHF_LHC25_PbPb_pass4_full_2P3PDstar_020.root'
+            '20_50': '/data/shared/CharmHadMassCalib/inputs/2025/2050/Train686954/AnalysisResultsHF_LHC25_PbPb_pass4_full_2P3PDstar_2050.root'
+    Selections:
+    -   Centrality: '0_20'
+        Occupancy: [0, 10000, 20000, 30000, 40000, 60000, 140000]
+        PtIntervals: [1, 3, 5]
+        BdtSelsBkg: [
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+        ]
+        BdtSelsNonPrompt: [
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+        ]
+    -   Centrality: '20_50'
+        Occupancy: [0, 10000, 20000, 30000, 40000, 60000, 140000]
+        PtIntervals: [1, 3, 5]
+        BdtSelsBkg: [
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+          [0.003, 0.003],
+        ]
+        BdtSelsNonPrompt: [
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+          [0.3, 0.3],
+        ]

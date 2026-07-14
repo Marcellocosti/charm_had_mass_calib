@@ -59,10 +59,13 @@ class CorrelatedBackgroundConfig:  # pylint: disable=too-many-instance-attribute
 class FitConfig:  # pylint: disable=too-many-instance-attributes
     """A standardized config object that FitHandler understands."""
     particle: str
+    year: str
     pt_min: float
     pt_max: float
     cent_min: List[int] | None
     cent_max: List[int] | None
+    occ_min: List[int] | None
+    occ_max: List[int] | None
     mass_range: List[float]
     signal_pdfs: List[str]
     bkg_pdfs: List[str]
@@ -104,6 +107,8 @@ class FitHandler():  # pylint: disable=too-few-public-methods
         pt_cent_suffix = f"{self._cfg.pt_min*10:.0f}_{self._cfg.pt_max*10:.0f}"
         if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
             pt_cent_suffix += f"_cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}"
+        if self._cfg.occ_min is not None and self._cfg.occ_max is not None:
+            pt_cent_suffix += f"_occ_{self._cfg.occ_min:.0f}_{self._cfg.occ_max:.0f}"
 
         hist_name = f"h_mass_{pt_cent_suffix}"
 
@@ -154,6 +159,9 @@ class FitHandler():  # pylint: disable=too-few-public-methods
         text += r"GeV/$c$, $|y|$ < 0.8""\n"
         if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
             text += xspace + fr"{self._cfg.cent_min:.0f}% < Cent. < {self._cfg.cent_max:.0f}%""\n"
+        if self._cfg.occ_min is not None and self._cfg.occ_max is not None:
+            text += xspace + fr"{self._cfg.occ_min:.0f} < Occ. < {self._cfg.occ_max:.0f}""\n"
+        text += xspace + f"Year: {self._cfg.year}""\n"
 
         anchored_text = AnchoredText(text, loc=loc, frameon=False)
         axs.add_artist(anchored_text)
@@ -185,6 +193,9 @@ class FitHandler():  # pylint: disable=too-few-public-methods
             suffix = f"{self._cfg.pt_min * 10:.0f}_{self._cfg.pt_max * 10:.0f}"
             if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
                 suffix += f"_cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}"
+            if self._cfg.occ_min is not None and self._cfg.occ_max is not None:
+                suffix += f"_occ_{self._cfg.occ_min:.0f}_{self._cfg.occ_max:.0f}"
+            suffix += f"_year_{self._cfg.year}"
             suffix += self._cfg.fig_suffix
 
             if frmt == "root":
@@ -229,9 +240,11 @@ class FitHandler():  # pylint: disable=too-few-public-methods
 
         data_hdl = self._get_data_handler()
 
-        fit_name = f"{self._cfg.particle}_pt_{self._cfg.pt_min*10:.0f}_{self._cfg.pt_max*10:.0f}"
+        fit_name = f"{self._cfg.particle}_pt_{self._cfg.pt_min*10:.0f}_{self._cfg.pt_max*10:.0f}_year_{self._cfg.year}"
         if self._cfg.cent_min is not None and self._cfg.cent_max is not None:
             fit_name += f"_cent_{self._cfg.cent_min:.0f}_{self._cfg.cent_max:.0f}"
+        if self._cfg.occ_min is not None and self._cfg.occ_max is not None:
+            fit_name += f"_occ_{self._cfg.occ_min:.0f}_{self._cfg.occ_max:.0f}"
 
         executor = FitExecutor(data_hdl, self._cfg.signal_pdfs, self._cfg.bkg_pdfs, fit_name, self._cfg.particle)
 
@@ -258,7 +271,9 @@ class FitHandler():  # pylint: disable=too-few-public-methods
                     with uproot.open(self._cfg.file_for_params_fix) as f:
                         hist_suffix = self._cfg.suffix_hist_for_params_fix.format(
                             cent_min=self._cfg.cent_min,
-                            cent_max=self._cfg.cent_max
+                            cent_max=self._cfg.cent_max,
+                            occ_min=self._cfg.occ_min,
+                            occ_max=self._cfg.occ_max,
                         )
                         hist_name = f'h_{param_name}_{particle}{hist_suffix}'
                         i_pt = np.where(
@@ -311,7 +326,9 @@ class FitHandler():  # pylint: disable=too-few-public-methods
                             pt_min=f"{self._cfg.pt_min*10:.0f}",
                             pt_max=f"{self._cfg.pt_max*10:.0f}",
                             cent_min=self._cfg.cent_min,
-                            cent_max=self._cfg.cent_max
+                            cent_max=self._cfg.cent_max,
+                            occ_min=self._cfg.occ_min,
+                            occ_max=self._cfg.occ_max
                         ),
                         limits=self._cfg.mass_range,
                         rebin=self._cfg.rebin
@@ -402,6 +419,8 @@ if __name__ == "__main__":
         pt_max=6.0,
         cent_min=0,
         cent_max=100,
+        occ_min=0,
+        occ_max=100,
         mass_range=[1.75, 2.1],
         signal_pdfs=["gaussian", "gaussian"],
         bkg_pdfs=["chebpol2"],

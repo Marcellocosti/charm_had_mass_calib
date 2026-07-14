@@ -54,7 +54,7 @@ H2D_NAME_RE = re.compile(
     r"^h2D_[^_]+_Occ_(?P<occ_min>[\d.]+)_(?P<occ_max>[\d.]+)"
     r"_Pt_(?P<pt_min>[\d.]+)_(?P<pt_max>[\d.]+)$"
 )
-CENT_DIR_RE = re.compile(r"^cent_(?P<cmin>\d+)_(?P<cmax>\d+)$")
+CENT_DIR_RE = re.compile(r"^cent_(?P<cmin>\d+)_(?P<cmax>\d+)_occ_(?P<occ_min>\d+)_(?P<occ_max>\d+)$")
 
 
 def fitconfig_to_dict(cfg: FitConfig) -> dict:
@@ -74,6 +74,7 @@ def discover_input_files(cfg: Dict) -> Dict[str, List[Dict]]:
     base_dir = os.path.expanduser(base_dir)
     skip_years = cfg["inputs"].get("skip_years", [])
     skip_cents = cfg["inputs"].get("skip_cents", [])
+    skip_occs = cfg["inputs"].get("skip_occs", [])
     by_year: Dict[str, List[Dict]] = {}
     for cent_dir in sorted(glob.glob(os.path.join(base_dir, "cent_*"))):
         m_cent = CENT_DIR_RE.match(os.path.basename(cent_dir))
@@ -81,8 +82,13 @@ def discover_input_files(cfg: Dict) -> Dict[str, List[Dict]]:
             continue
         cent_min = int(m_cent.group("cmin"))
         cent_max = int(m_cent.group("cmax"))
+        occ_min = int(m_cent.group("occ_min"))
+        occ_max = int(m_cent.group("occ_max"))
         if [cent_min, cent_max] in skip_cents:
             print(f"Skipping centrality {cent_min}-{cent_max} as requested in config")
+            continue
+        if [occ_min, occ_max] in skip_occs:
+            print(f"Skipping occupancy {occ_min}-{occ_max} as requested in config")
             continue
         for year_name in sorted(os.listdir(cent_dir)):
             if year_name in skip_years:
@@ -95,6 +101,8 @@ def discover_input_files(cfg: Dict) -> Dict[str, List[Dict]]:
                 "input_path": mass_file,
                 "cent_min": cent_min,
                 "cent_max": cent_max,
+                "occ_min": occ_min,
+                "occ_max": occ_max,
             })
     return by_year
 
@@ -136,14 +144,14 @@ def project_year(
 ) -> Tuple[List[Tuple[float, float]], Tuple[int, int]]:
     """Project per-centrality and centrality-integrated TH2s for one year.
 
-    Writes one ROOT file containing ``h_mass_<PT*10>_<PT*10>_cent_<CMIN>_<CMAX>``
+    Writes one ROOT file containing ``h_mass_<PT*10>_<PT*10>_cent_<CMIN>_<CMAX>_occ_<OCC_MIN>_<OCC_MAX>``
     for every available centrality plus the integrated range
     ``(min(cent_min), max(cent_max))``.
 
-    Returns ``(pt_bins, (integrated_cent_min, integrated_cent_max))``.
+    Returns ``(pt_bins, (integrated_cent_min, integrated_cent_max, integrated_occ_min, integrated_occ_max))``.
     """
     per_cent = {
-        (entry["cent_min"], entry["cent_max"]): _load_h2_per_pt(entry["input_path"])
+        (entry["cent_min"], entry["cent_max"], entry['occ_min'], entry['occ_max']): _load_h2_per_pt(entry["input_path"])
         for entry in year_entries
     }
 
@@ -166,29 +174,31 @@ def project_year(
                 clone.SetDirectory(0)
                 integrated[pt_key] = clone
 
-    int_cmin = min(c for c, _ in per_cent)
-    int_cmax = max(c for _, c in per_cent)
+    int_cmin = min(c for c, _, _, _ in per_cent)
+    int_cmax = max(c for _, c, _, _ in per_cent)
+    int_occ_min = min(o for _, _, o, _ in per_cent)
+    int_occ_max = max(o for _, _, _, o in per_cent)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     f_out = ROOT.TFile.Open(output_path, "RECREATE")
-    for (cmin, cmax), h2_per_pt in per_cent.items():
+    for (cmin, cmax, occ_min, occ_max), h2_per_pt in per_cent.items():
         for pt_min, pt_max in pt_bins:
             h1 = h2_per_pt[(pt_min, pt_max)].ProjectionX(
-                f"h_mass_{pt_min*10:.0f}_{pt_max*10:.0f}_cent_{cmin}_{cmax}"
+                f"h_mass_{pt_min*10:.0f}_{pt_max*10:.0f}_cent_{cmin}_{cmax}_occ_{occ_min}_{occ_max}"
             )
             h1.SetDirectory(0)
             f_out.cd()
             h1.Write()
     for pt_min, pt_max in pt_bins:
         h1 = integrated[(pt_min, pt_max)].ProjectionX(
-            f"h_mass_{pt_min*10:.0f}_{pt_max*10:.0f}_cent_{int_cmin}_{int_cmax}"
+            f"h_mass_{pt_min*10:.0f}_{pt_max*10:.0f}_cent_{int_cmin}_{int_cmax}_occ_{int_occ_min}_{int_occ_max}"
         )
         h1.SetDirectory(0)
         f_out.cd()
         h1.Write()
     f_out.Close()
 
-    return pt_bins, (int_cmin, int_cmax)
+    return pt_bins, (int_cmin, int_cmax, int_occ_min, int_occ_max)
 
 
 def merge_pdfs(cfg):
@@ -392,12 +402,14 @@ def get_config(
         cfg: Dict,
         pt_info: Tuple[int, float, float],
         cent_info: Tuple[int, int],
+        occ_info: Tuple[int, int],
         mb_results: Dict = None,
         result_sigma_fix: Dict = None
 ) -> FitConfig:
     """Create a FitConfig object for one (pT, centrality) bin."""
     i_pt, pt_min, pt_max = pt_info
     cent_min, cent_max = cent_info
+    occ_min, occ_max = occ_info
 
     ratio_sigma_dplus_to_ds = -1.
     if isinstance(cfg["fit_configs"]["signal"]["ratio_sigma_dplus_to_ds"], list):
@@ -407,10 +419,13 @@ def get_config(
 
     return FitConfig(
         particle=cfg["particle"],
+        year=cfg["year"],
         pt_min=pt_min,
         pt_max=pt_max,
         cent_min=cent_min,
         cent_max=cent_max,
+        occ_min=occ_min,
+        occ_max=occ_max,
         mass_range=[
             cfg["fit_configs"]["mass"]["mins"][i_pt],
             cfg["fit_configs"]["mass"]["maxs"][i_pt]
@@ -474,7 +489,9 @@ def _run_pass(submissions: List[FitConfig], max_workers: int, desc: str) -> Dict
         for future in tqdm(as_completed(futures), total=len(futures), desc=desc):
             fit_cfg, res = future.result()
             results[(fit_cfg.pt_min, fit_cfg.pt_max,
-                     fit_cfg.cent_min, fit_cfg.cent_max)] = (fit_cfg, res)
+                     fit_cfg.cent_min, fit_cfg.cent_max,
+                     fit_cfg.occ_min, fit_cfg.occ_max)] = (fit_cfg, res)
+
     return results
 
 
@@ -487,8 +504,8 @@ def fit_one_year(  # pylint: disable=too-many-locals
     """Run the per-year fit pipeline: centrality-integrated fit first, then
     per-centrality fits using those values for any parameter marked ``fix_to_mb``.
 
-    Returns ``(results, pt_bins, integrated_range, cent_ranges)`` where ``results``
-    keys are ``(pt_min, pt_max, cent_min, cent_max)``; the integrated fit is
+    Returns ``(results, pt_bins, integrated_range, cent_occ_ranges)`` where ``results``
+    keys are ``(pt_min, pt_max, cent_min, cent_max, occ_min, occ_max)``; the integrated fit is
     included alongside the per-centrality entries. ``pt_bins`` is the list of
     ``(pt_min, pt_max)`` tuples discovered in the input files.
     """
@@ -500,6 +517,7 @@ def fit_one_year(  # pylint: disable=too-many-locals
     pt_maxs = [pt_max for _, pt_max in pt_bins]
 
     file_cfg = copy.deepcopy(base_cfg)
+    file_cfg["year"] = year
     file_cfg["inputs"]["data"] = projections_path
     file_cfg["output"]["directory"] = output_dir
 
@@ -508,45 +526,45 @@ def fit_one_year(  # pylint: disable=too-many-locals
             os.path.join(output_dir, "fits", f"fits_{file_cfg['output']['suffix']}.root")
         )
 
-    int_cmin, int_cmax = integrated_range
+    int_cmin, int_cmax, int_occ_min, int_occ_max = integrated_range
     sig_cfg = base_cfg["fit_configs"]["signal"]
     max_workers = base_cfg["max_workers"]
-    cent_ranges = [(e["cent_min"], e["cent_max"]) for e in year_entries]
+    cent_occ_ranges = [(e["cent_min"], e["cent_max"], e["occ_min"], e["occ_max"]) for e in year_entries]
 
     # 1) Centrality-integrated (MB-like) pass.
     if base_cfg.get("skip_cent_integrated"):
         integrated_results = {}
     else:
         integrated_results = _run_pass(
-            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax))
+            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax), (int_occ_min, int_occ_max))
             for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))],
             max_workers, f"{year} integrated"
         )
 
         # 2) Integrated re-fit with D+ sigma fixed to ratio * Ds sigma where requested.
         integrated_results.update(_run_pass(
-            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax),
-                        None, integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1])
+            [get_config(file_cfg, (i, pt_min, pt_max), (int_cmin, int_cmax), (int_occ_min, int_occ_max),
+                        None, integrated_results[(pt_min, pt_max, int_cmin, int_cmax, int_occ_min, int_occ_max)][1])
             for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs))
             if sig_cfg["fix_sigma_dplus_to_ds"][i]],
             max_workers, f"{year} integrated (dplus sigma)"
         ))
 
-    # 3) Per-centrality fits using integrated results to fix params (fix_to_mb).
+    # 3) Per-centrality and per-occupancy fits using integrated results to fix params (fix_to_mb).
     per_cent_subs = []
-    for cent_min, cent_max in cent_ranges:
+    for cent_min, cent_max, occ_min, occ_max in cent_occ_ranges:
         for i, (pt_min, pt_max) in enumerate(zip(pt_mins, pt_maxs)):
             mb_res = None
-            if (pt_min, pt_max, int_cmin, int_cmax) in integrated_results:
-                mb_res = integrated_results[(pt_min, pt_max, int_cmin, int_cmax)][1]
+            if (pt_min, pt_max, int_cmin, int_cmax, int_occ_min, int_occ_max) in integrated_results:
+                mb_res = integrated_results[(pt_min, pt_max, int_cmin, int_cmax, int_occ_min, int_occ_max)][1]
             per_cent_subs.append(
-                get_config(file_cfg, (i, pt_min, pt_max), (cent_min, cent_max), mb_res)
+                get_config(file_cfg, (i, pt_min, pt_max), (cent_min, cent_max), (occ_min, occ_max), mb_res)
             )
     cent_results = _run_pass(per_cent_subs, max_workers, f"{year} per-cent")
 
     # 4) Per-centrality re-fit with D+ sigma fixed where it wasn't already fix_to_mb.
     refit_subs = []
-    for (pt_min, pt_max, cent_min, cent_max), (_, res) in cent_results.items():
+    for (pt_min, pt_max, cent_min, cent_max, occ_min, occ_max), (_, res) in cent_results.items():
         i_pt = pt_mins.index(pt_min)
         if not sig_cfg["fix_sigma_dplus_to_ds"][i_pt]:
             continue
@@ -556,7 +574,7 @@ def fit_one_year(  # pylint: disable=too-many-locals
         ):
             continue
         refit_subs.append(get_config(
-            file_cfg, (i_pt, pt_min, pt_max), (cent_min, cent_max), None, res
+            file_cfg, (i_pt, pt_min, pt_max), (cent_min, cent_max), (occ_min, occ_max), res
         ))
     cent_results.update(_run_pass(refit_subs, max_workers, f"{year} per-cent (dplus sigma)"))
 
@@ -564,7 +582,7 @@ def fit_one_year(  # pylint: disable=too-many-locals
     merge_partial_root(file_cfg)
 
     cent_results.update(integrated_results)
-    return cent_results, pt_bins, integrated_range, cent_ranges
+    return cent_results, pt_bins, integrated_range, cent_occ_ranges
 
 
 def fit(config_file_name):
@@ -589,7 +607,7 @@ def fit(config_file_name):
         output_dir = os.path.join(base_output_dir, year)
         os.makedirs(output_dir, exist_ok=True)
 
-        results, pt_bins, integrated_range, cent_ranges = fit_one_year(
+        results, pt_bins, integrated_range, cent_occ_ranges = fit_one_year(
             cfg, year, year_entries, output_dir
         )
         pt_mins = [pt_min for pt_min, _ in pt_bins]
@@ -608,9 +626,11 @@ def fit(config_file_name):
         )
 
         # HistHandler needs every (cent_min, cent_max) seen in the dataframe.
-        cent_mins = [c[0] for c in cent_ranges] + [integrated_range[0]]
-        cent_maxs = [c[1] for c in cent_ranges] + [integrated_range[1]]
-        h_handler = HistHandler(pt_mins, pt_maxs, cent_mins, cent_maxs)
+        cent_mins = [c[0] for c in cent_occ_ranges] + [integrated_range[0]]
+        cent_maxs = [c[1] for c in cent_occ_ranges] + [integrated_range[1]]
+        occ_mins = [c[2] for c in cent_occ_ranges] + [integrated_range[0]]
+        occ_maxs = [c[3] for c in cent_occ_ranges] + [integrated_range[1]]
+        h_handler = HistHandler(pt_mins, pt_maxs, cent_mins, cent_maxs, occ_mins, occ_maxs)
         h_handler.set_histos(df)
         h_handler.dump_to_root(
             os.path.join(output_dir, f"mass_fits{cfg['output']['suffix']}.root")

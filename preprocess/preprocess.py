@@ -52,7 +52,7 @@ def get_input_paths(year_input):
         sys.exit(1)
 
 
-def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_combinations, bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt, pt_intervals):
+def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, pt_bins, occ_min, occ_max, bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt, pt_intervals):
     """
     Process a single sparse from an input file for all pt bins according to the configuration.
 
@@ -76,12 +76,13 @@ def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_comb
     # Apply centrality cut if axis is available
     logger(f"Applying cent cut to sparse {sparse} with value {cent_class[0]} -- {cent_class[1]}", "INFO")
     sparse.GetAxis(sparse_dict['Cent']).SetRangeUser(cent_class[0], cent_class[1])
+    sparse.GetAxis(sparse_dict['Occ']).SetRangeUser(occ_min, occ_max)
 
     out_file_dir = f"{out_dir}/jobs"
     os.makedirs(out_file_dir, exist_ok=True)
     out_file = TFile(f'{out_file_dir}/AnalysisResults_{i_file}.root', 'recreate')
 
-    for (occ_min, occ_max), (pt_min, pt_max) in occ_pt_combinations:
+    for pt_min, pt_max in zip(pt_bins[:-1], pt_bins[1:]):
         # Retrieve pt bin idx
         if bdt_sels_bkg is not None:
             bkg_max_cut = bdt_sels_bkg[pt_intervals.index(pt_min)]
@@ -93,7 +94,6 @@ def process_sparse(hadron, cent_class, i_file, infile_path, out_dir, occ_pt_comb
             nonprompt_max_cut = bdt_sels_nonprompt[pt_intervals.index(pt_min)]
             sparse.GetAxis(sparse_dict['ScoreFD']).SetRangeUser(0, nonprompt_max_cut)
         sparse.GetAxis(sparse_dict['Pt']).SetRangeUser(pt_min, pt_max)
-        sparse.GetAxis(sparse_dict['Occ']).SetRangeUser(occ_min, occ_max)
         proj_sparse = sparse.Projection(sparse_dict['ScoreBkg'], sparse_dict['Mass'], 'O')
         proj_sparse.SetName(f"h2D_{hadron}_Occ_{occ_min}_{occ_max}_Pt_{pt_min}_{pt_max}")
         proj_sparse.Write()
@@ -126,41 +126,58 @@ if __name__ == "__main__":
                          if isinstance(sel_cfg['Centrality'], str) else [sel_cfg['Centrality']]
 
             # Compute all combinations of occupancy and pt intervals
-            occupancy_bins = list(zip(sel_cfg["Occupancy"][:-1], sel_cfg["Occupancy"][1:]))
-            pt_bins = list(zip(sel_cfg["PtIntervals"][:-1], sel_cfg["PtIntervals"][1:]))
-            occ_pt_combinations = list(product(occupancy_bins, pt_bins))
+            for i_occ_bin, (occ_min, occ_max) in enumerate(zip(sel_cfg["Occupancy"][:-1], sel_cfg["Occupancy"][1:])):
+                logger(f"Processing centrality {centrality}, occupancy {occ_min} -- {occ_max}", "INFO")
+                # Loop over the different years
+                for year, files in hadron_cfg['Inputs'].items():
+                    file_paths = get_input_paths(files)
 
-            # Loop over the different years
-            for year, files in hadron_cfg['Inputs'].items():
-                file_paths = get_input_paths(files)
-                bdt_sels_bkg = sel_cfg.get('BdtSelsBkg', {}).get(year, None)
-                bdt_sels_prompt = sel_cfg.get('BdtSelsPrompt', {}).get(year, None)
-                bdt_sels_nonprompt = sel_cfg.get('BdtSelsNonPrompt', {}).get(year, None)
+                    # Retrieve bdt sels, can be year-dependent and lists 
+                    # for when occupancy diff studies are conducted
+                    bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt = None, None, None
+                    if sel_cfg.get('BdtSelsBkg'):
+                        bdt_sels_bkg = sel_cfg['BdtSelsBkg']
+                        if isinstance(bdt_sels_bkg, list):
+                            bdt_sels_bkg = bdt_sels_bkg[i_occ_bin]
+                        else:
+                            bdt_sels_bkg = bdt_sels_bkg[year]
+                    if sel_cfg.get('BdtSelsPrompt'):
+                        bdt_sels_prompt = sel_cfg['BdtSelsPrompt']
+                        if isinstance(bdt_sels_prompt, list):
+                            bdt_sels_prompt = bdt_sels_prompt[i_occ_bin]
+                        else:
+                            bdt_sels_prompt = bdt_sels_prompt[year]
+                    if sel_cfg.get('BdtSelsNonPrompt'):
+                        bdt_sels_nonprompt = sel_cfg['BdtSelsNonPrompt']
+                        if isinstance(bdt_sels_nonprompt, list):
+                            bdt_sels_nonprompt = bdt_sels_nonprompt[i_occ_bin]
+                        else:
+                            bdt_sels_nonprompt = bdt_sels_nonprompt[year]
 
-                if file_paths is None:
-                    logger(f"No matching centrality found for input, skipping!", "ERROR")
-                    continue
+                    if file_paths is None:
+                        logger(f"No matching centrality found for input, skipping!", "ERROR")
+                        continue
 
-                out_dir = f"{output_dir_hadron}/cent_{int(centrality[0])}_{int(centrality[1])}/{year}"
-                os.makedirs(out_dir, exist_ok=True)
-                logger(f"##### Skimming centrality {centrality}, year {year} #####", "WARNING")
-                with concurrent.futures.ThreadPoolExecutor(args.workers) as executor:
-                    tasks_sparses = [executor.submit(process_sparse, hadron_cfg['Name'], centrality,
-                                                     i_file, file, out_dir, occ_pt_combinations,
-                                                     bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt,
-                                                     sel_cfg["PtIntervals"]) 
-                                     for i_file, file in enumerate(file_paths)]
-                # Throw exceptions
-                for task in tasks_sparses:
-                    try:
-                        task.result()
-                    except Exception as e:
-                        logger(f"Error in processing sparse: {e}", "ERROR")
+                    out_dir = f"{output_dir_hadron}/cent_{int(centrality[0])}_{int(centrality[1])}_occ_{int(occ_min)}_{int(occ_max)}/{year}"
+                    os.makedirs(out_dir, exist_ok=True)
+                    logger(f"##### Skimming centrality {centrality}, year {year} #####", "WARNING")
+                    with concurrent.futures.ThreadPoolExecutor(args.workers) as executor:
+                        tasks_sparses = [executor.submit(process_sparse, hadron_cfg['Name'], centrality,
+                                                         i_file, file, out_dir, sel_cfg["PtIntervals"], occ_min, occ_max,
+                                                         bdt_sels_bkg, bdt_sels_prompt, bdt_sels_nonprompt,
+                                                         sel_cfg["PtIntervals"]) 
+                                         for i_file, file in enumerate(file_paths)]
+                    # Throw exceptions
+                    for task in tasks_sparses:
+                        try:
+                            task.result()
+                        except Exception as e:
+                            logger(f"Error in processing sparse: {e}", "ERROR")
 
-                job_dir = Path(out_dir) / "jobs"
-                paths_file = Path(out_dir) / "jobs_file_paths.txt"
-                paths_file.write_text("\n".join(str(p) for p in job_dir.glob("*.root")))
+                    job_dir = Path(out_dir) / "jobs"
+                    paths_file = Path(out_dir) / "jobs_file_paths.txt"
+                    paths_file.write_text("\n".join(str(p) for p in job_dir.glob("*.root")))
 
-                # Merge all the output files
-                os.system(f"hadd -f -v 1 {out_dir}/MassDistributions.root @{out_dir}/jobs_file_paths.txt")
-                logger(f"Finished processing {out_dir}\n\n", "INFO")
+                    # Merge all the output files
+                    os.system(f"hadd -f -v 1 {out_dir}/MassDistributions.root @{out_dir}/jobs_file_paths.txt")
+                    logger(f"Finished processing {out_dir}\n\n", "INFO")

@@ -41,11 +41,14 @@ class HistHandler:  # pylint: disable=too-many-instance-attributes
     - pt_maxs (list or array-like): Maximum values for pT bins.
     - cent_mins (list or array-like, optional): Minimum values for centrality bins.
     - cent_maxs (list or array-like, optional): Maximum values for centrality bins.
+    - occ_mins (list or array-like, optional): Minimum values for occupancy bins.
+    - occ_maxs (list or array-like, optional): Maximum values for occupancy bins.
     """
 
-    def __init__(self, pt_mins, pt_maxs, cent_mins=None, cent_maxs=None):
+    def __init__(self, pt_mins, pt_maxs, cent_mins=None, cent_maxs=None, occ_mins=None, occ_maxs=None):
         self._pt_info = BinsHelper(pt_mins, pt_maxs)
         self._cent_info = BinsHelper(cent_mins, cent_maxs) if cent_mins is not None else None
+        self._occ_info = BinsHelper(occ_mins, occ_maxs) if occ_mins is not None else None
         self._pt_axis_title = '#it{p}_{T} (GeV/#it{c})'
         self._n_ev = None
         self._histos = {}
@@ -87,11 +90,13 @@ class HistHandler:  # pylint: disable=too-many-instance-attributes
             }
         }
 
-    def _create_histo_name(self, obs, cent_min=None, cent_max=None):
+    def _create_histo_name(self, obs, cent_min=None, cent_max=None, occ_min=None, occ_max=None):
         """Generate histogram name based on observable and centrality."""
         base_name = f'h_{obs}'
         if cent_min is not None and cent_max is not None:
             base_name += f'_{cent_min:.0f}_{cent_max:.0f}'
+        if occ_min is not None and occ_max is not None:
+            base_name += f'_{occ_min:.0f}_{occ_max:.0f}'
         return base_name
 
     def _create_histogram(self, obs, y_title):
@@ -107,9 +112,9 @@ class HistHandler:  # pylint: disable=too-many-instance-attributes
             hist.SetDirectory(0)
             histos.append(hist)
         else:
-            for cent_min, cent_max in zip(self._cent_info.mins, self._cent_info.maxs):
+            for cent_min, cent_max, occ_min, occ_max in zip(self._cent_info.mins, self._cent_info.maxs, self._occ_info.mins, self._occ_info.maxs):
                 hist = ROOT.TH1D(
-                    self._create_histo_name(obs, cent_min, cent_max),
+                    self._create_histo_name(obs, cent_min, cent_max, occ_min, occ_max),
                     f';{self._pt_axis_title};{y_title}',
                     self._pt_info.n_bins, self._pt_info.edges
                 )
@@ -173,6 +178,9 @@ class HistHandler:  # pylint: disable=too-many-instance-attributes
         for obs in observables:
             if obs not in row:
                 continue
+            if row[obs] is np.NaN:
+                print(f"Warning: NaN value encountered for observable {obs} at pt index {i_pt} and centrality index {i_cent}. Skipping this entry.")
+                continue
 
             # Set sig1 values
             self._set_histogram_values(
@@ -227,7 +235,7 @@ class HistHandler:  # pylint: disable=too-many-instance-attributes
         """Set histogram bin contents and errors based on the provided DataFrame."""
         for _, row in df.iterrows():
             i_pt = self._pt_info.mins.index(row["pt_min_cfg"])
-            i_cent = self._get_centrality_index(row)
+            i_cent = self._get_centrality_index(row)  # No occupancy index needed, it is the same as the centrality
 
             # Get available observables for this row
             available_observables = self._get_available_observables(row)

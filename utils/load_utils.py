@@ -86,7 +86,11 @@ def get_dplus_ds_results(input_file, particle_map, debug=False):
 
     for row in results_df.itertuples(index=False):
 
-        cent_class = f"{row.cent_min_cfg}_{row.cent_max_cfg}"
+        # Check if row has occ_min_cfg and occ_max_cfg attributes
+        if not hasattr(row, 'occ_min_cfg') or not hasattr(row, 'occ_max_cfg'):
+            cent_class = f"{row.cent_min_cfg}_{row.cent_max_cfg}"
+        else:
+            cent_class = f"cent_{row.cent_min_cfg}_{row.cent_max_cfg}_occ_{row.occ_min_cfg}_{row.occ_max_cfg}"
         pt_label = f"pt_{int(row.pt_min_cfg*10)}_{int(row.pt_max_cfg*10)}"
 
         for particle, idx in particle_map.items():
@@ -112,13 +116,12 @@ def get_dplus_ds_results(input_file, particle_map, debug=False):
                 "shift": shift,
                 "shift_unc": shift_unc,
             }
-            
+
     if debug:
         print("D+ ---> KPiPi results:")
         for year, cent_classes in results.items():
             for cent_class, pt_bins in cent_classes.items():
                 for pt_bin, values in pt_bins.items():
                     print(f"Year: {year}, Cent: {cent_class}, Pt bin: {pt_bin}, Mean: {values['mean']:.5f} ± {values['mean_unc']:.5f}, Sigma: {values['sigma']:.5f} ± {values['sigma_unc']:.5f}")
-
 
     return results

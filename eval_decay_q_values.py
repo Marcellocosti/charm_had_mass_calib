@@ -22,23 +22,6 @@ os.makedirs(f"{BASEPATH}/final_plots/calib_mass", exist_ok=True)
 
 # Load inputs as dictionaries
 YEARS = ["2023", "2024", "2025"]
-
-d0_results = get_d0_lc_results("D0", "/data/shared/CharmHadMassCalib/outputs", YEARS, debug=True)
-lc_results = get_d0_lc_results("Lc", "/data/shared/CharmHadMassCalib/outputs", YEARS, debug=True)
-
-ds_results, dplus_kpipi_results, dplus_kkpi_results = {}, {}, {}
-for year in YEARS:
-    dplus_kpipi_results[year] = get_dplus_ds_results(f"/data/shared/CharmHadMassCalib/outputs/Dplus/{year}/fit_results.parquet",
-                                                     {"DplusKPiPi": 0})["DplusKPiPi"]
-
-    res = get_dplus_ds_results(f"/data/shared/CharmHadMassCalib/outputs/Ds/{year}/fit_results.parquet",
-                               {"Ds": 0, "DplusKKPi": 1})
-    ds_results[year] = res["Ds"]
-    dplus_kkpi_results[year] = res["DplusKKPi"]
-
-
-# Plot mean and sigma values for D0, D+, Ds, and Lc as a function of pt for each year and centrality class
-RESULTS = {"D0": d0_results, "DplusKPiPi": dplus_kpipi_results, "DplusKKPi": dplus_kkpi_results, "Ds": ds_results, "Lc": lc_results}
 MASSES_PDG_LINES = []
 PARTICLE_NAMES = {
     "D0": "D^{0}",
@@ -64,6 +47,27 @@ AXIS_LABELS = {
     ),
 }
 
+Y_TITLE_OFFSETS = {
+    "mean": 1.70,
+    "sigma": 1.40,
+    "shift": 1.35,
+}
+
+d0_results = get_d0_lc_results("D0", "/data/shared/CharmHadMassCalib/outputs", YEARS, debug=True)
+lc_results = get_d0_lc_results("Lc", "/data/shared/CharmHadMassCalib/outputs", YEARS, debug=True)
+
+ds_results, dplus_kpipi_results, dplus_kkpi_results = {}, {}, {}
+for year in YEARS:
+    dplus_kpipi_results[year] = get_dplus_ds_results(f"/data/shared/CharmHadMassCalib/outputs/Dplus/{year}/fit_results.parquet",
+                                                     {"DplusKPiPi": 0})["DplusKPiPi"]
+
+    res = get_dplus_ds_results(f"/data/shared/CharmHadMassCalib/outputs/Ds/{year}/fit_results.parquet",
+                               {"Ds": 0, "DplusKKPi": 1})
+    ds_results[year] = res["Ds"]
+    dplus_kkpi_results[year] = res["DplusKKPi"]
+
+# Plot mean and sigma values for D0, D+, Ds, and Lc as a function of pt for each year and centrality class
+RESULTS = {"D0": d0_results, "DplusKPiPi": dplus_kpipi_results, "DplusKKPi": dplus_kkpi_results, "Ds": ds_results, "Lc": lc_results}
 
 def weighted_average_with_uncertainty(values, values_unc, weights, weights_unc):
     values = np.asarray(values, dtype=float)
@@ -105,7 +109,7 @@ def get_shifts_with_uncs(particle, results, year, cent_class, pt_bins):
                     cc for cc in results[year]
                     if (lambda cmin, cmax:
                         cmin >= cent_min and cmax <= cent_max)(
-                            *map(float, cc.split("_"))
+                            *map(float, cc.split('_occ')[0].replace('cent_', '').replace('_occ', '').split("_"))
                         )
                 ]
 
@@ -165,6 +169,7 @@ print(f"Q-value for D+ -> K- pi+ pi+: {Q_VALUE_DPLUS_KPIPI:.5f} GeV/c^2")
 print(f"Q-value for D0 -> K- pi+: {Q_VALUE_DZERO_KPI:.5f} GeV/c^2")
 
 
+print(f"\n\n Plotting mean, sigma, and shifts vs pT for different particles and years.")
 # PLOTS OF MEAN, SIGMA, AND SHIFTS VS PT FOR DIFFERENT PARTICLES AND YEARS
 out_file_vs_pt = TFile.Open(f"{BASEPATH}/final_plots/means_sigmas_shifts_vs_pt.root", "RECREATE")
 for variable in ["mean", "sigma", "shift"]:
@@ -172,7 +177,10 @@ for variable in ["mean", "sigma", "shift"]:
         for cent_class in next(iter(results.values())).keys():
 
             c = make_canvas(f"{variable}_{particle}_{cent_class}")
-            leg = make_legend()
+            leg = make_legend(x1=0.20, y1=0.82, x2=0.60, y2=0.92)
+            cent_min, cent_max = map(int, cent_class.split('_occ_')[0].replace("cent_", "").split("_"))
+            leg.SetHeader(f"Centrality {cent_min}-{cent_max}%")
+            leg.SetNColumns(3)
 
             mg = TMultiGraph()
             keep = []
@@ -217,7 +225,7 @@ for variable in ["mean", "sigma", "shift"]:
                 g.Write(f"{variable}_{particle}_{cent_class}_{year}")
 
             set_plot_style(mg, xtitle="#it{p}_{T} (GeV/#it{c})", variable=variable,
-                          labels=AXIS_LABELS, particle=particle, cent_class=cent_class)
+                           labels=AXIS_LABELS, particle=particle, ytitleoffset=Y_TITLE_OFFSETS[variable])
 
             leg.Draw()
 
@@ -225,6 +233,7 @@ for variable in ["mean", "sigma", "shift"]:
 out_file_vs_pt.Close()
 
 
+print(f"\n\n Plotting mean, sigma, and shifts vs centrality for different particles and years.")
 ### PLOTS OF MEAN, SIGMA, AND SHIFTS VS CENTRALITY FOR DIFFERENT PARTICLES AND YEARS
 out_file_vs_cent = TFile.Open(f"{BASEPATH}/final_plots/means_sigmas_shifts_vs_cent.root", "RECREATE")
 for variable in ["mean", "sigma", "shift"]:
@@ -233,9 +242,11 @@ for variable in ["mean", "sigma", "shift"]:
 
         best_pt_bin = max(next(iter(next(iter(results.values())).values())).items(),
                           key=lambda kv: kv[1]["raw_yields"])[0]
-
+        pt_min, pt_max = map(float, best_pt_bin.replace("pt_", "").split("_"))
         c = make_canvas(f"{variable}_cent_{particle}")
-        leg = make_legend()
+        leg = make_legend(x1=0.20, y1=0.82, x2=0.60, y2=0.92)
+        leg.SetHeader(f"#it{{p}}_{{T}} {(pt_min/10):.1f}-{(pt_max/10):.1f} GeV/c")
+        leg.SetNColumns(3)
 
         mg = TMultiGraph()
         keep = []
@@ -249,6 +260,8 @@ for variable in ["mean", "sigma", "shift"]:
                     continue
 
                 print(f"Using best pT bin {best_pt_bin} for {particle} in centrality {cent_class}, year {year}.")
+                if "_occ_" in cent_class:
+                    cent_class = cent_class.split("_occ_")[0].replace("cent_", "")
                 cmin, cmax = map(float, cent_class.split("_"))
                 v = pt_bins[best_pt_bin]
 
@@ -282,7 +295,7 @@ for variable in ["mean", "sigma", "shift"]:
             g.Write(f"{variable}_{particle}_{best_pt_bin}_{year}")
 
         set_plot_style(mg, xtitle="Centrality (%)", variable=variable, labels=AXIS_LABELS,
-                       particle=particle, pt_range=best_pt_bin.replace("pt_", "").split("_"))
+                       particle=particle, ytitleoffset=Y_TITLE_OFFSETS[variable])
 
         leg.Draw()
 
@@ -295,9 +308,14 @@ plot_cfgs = {
     "vs_pt_cent_0_20": {
         "pt_bins": [1, 2, 4, 6, 8, 12, 24],
         "cent_class": "0_20"
+    },
+    "vs_pt_cent_20_50": {
+        "pt_bins": [1, 2, 4, 6, 8, 12, 24],
+        "cent_class": "20_50"
     }
 }
 
+print(f"\n\n Plotting mean, sigma, and shifts vs centrality for different particles and years.")
 out_file_vs_qvalue = TFile.Open(f"{BASEPATH}/final_plots/shifts_vs_qvalue.root", "RECREATE")
 for plot_name, plot_cfg in plot_cfgs.items():
 
@@ -322,7 +340,10 @@ for plot_name, plot_cfg in plot_cfgs.items():
     for ipt, (ptmin, ptmax) in enumerate(zip(pt_bins[:-1], pt_bins[1:])):
 
         c = make_canvas(f"{plot_name}_{ipt}")
-        leg = make_legend(x1=0.45, y1=0.80, x2=0.65, y2=0.92)
+        leg = make_legend(x1=0.45, y1=0.82, x2=0.85, y2=0.92)
+        cent_min, cent_max = map(int, cent_class.split('_occ_')[0].replace('cent_', '').split("_"))
+        leg.SetHeader(f"#it{{p}}_{{T}} {ptmin}-{ptmax} GeV/#it{{c}}, cent. {cent_min}-{cent_max}%")
+        leg.SetNColumns(3)
 
         mg = TMultiGraph()
         keep = []
@@ -350,7 +371,7 @@ for plot_name, plot_cfg in plot_cfgs.items():
 
             g = TGraphErrors(len(x), array("d", x), array("d", y), array("d", ex), array("d", ey))
             lin_fits.append(ROOT.TF1(f"lin_fit_{year}", "pol1", Q_VALUE_DPLUS_KKPI - 0.01, Q_VALUE_DZERO_KPI + 0.1))
-            fit_res.append(g.Fit(lin_fits[-1], "R0S"))  # Fit with a linear function, suppress output
+            fit_res.append(g.Fit(lin_fits[-1], "R0SQ"))  # Fit with a linear function, suppress output
             set_graph_style(g, year)
             mg.Add(g)
             keep.append(g)
@@ -360,8 +381,7 @@ for plot_name, plot_cfg in plot_cfgs.items():
             g.SetTitle(f"shifts_vs_qvalue_{plot_name}_{ptmin}_{ptmax}_{year};Q value (GeV/#it{{c}}^{{2}});Mass shift (MeV/#it{{c}}^{{2}})")
             g.Write(f"shifts_vs_qvalue_{plot_name}_{ptmin}_{ptmax}_{year}")
 
-        set_plot_style(mg, xtitle="Q value (GeV/#it{c}^{2})", variable="shift",
-                       labels=AXIS_LABELS, cent_class=cent_class, pt_range=(ptmin, ptmax))
+        set_plot_style(mg, xtitle="Q value (GeV/#it{c}^{2})", variable="shift", labels=AXIS_LABELS, ytitleoffset=1.35)
 
         for fit, year in zip(lin_fits, YEARS):
             set_fit_style(fit, year)
@@ -439,3 +459,106 @@ for plot_name, plot_cfg in plot_cfgs.items():
         lc_extrap_graph.Write()
 
 out_file_vs_qvalue.Close()
+
+print("\n\n Checking occupancy dependence with D+ ---> Kpipi")
+# Check occupancy dependence of the shifts for D+ in all pt bins, years, cent classes
+dplus_kpipi_occ_diff_results = {}
+for year in YEARS:
+    dplus_kpipi_occ_diff_results[year] = get_dplus_ds_results(f"/data/shared/CharmHadMassCalib/outputs/OccDiff/Dplus/{year}/fit_results.parquet",
+                                                              {"DplusKPiPi": 0})["DplusKPiPi"]
+
+# For each centrality, plot mean vs occupancy for each pt bin and year
+out_file_occ = TFile.Open(f"{BASEPATH}/final_plots/means_sigmas_shifts_vs_occ.root", "RECREATE")
+
+for variable in ["mean", "sigma", "shift"]:
+
+    # all available pT bins
+    all_pt_bins = sorted({pt
+                          for year in YEARS
+                          for cent_occ in dplus_kpipi_occ_diff_results[year].values()
+                          for pt in cent_occ.keys()
+    })
+
+    # all available centrality classes
+    all_cent = sorted({"_".join(key.split("_")[1:3])
+                       for year in YEARS
+                       for key in dplus_kpipi_occ_diff_results[year]
+    })
+
+    for cent in all_cent:
+
+        for pt_bin in all_pt_bins:
+
+            c = make_canvas(f"{variable}_occ_cent_{cent}_{pt_bin}")
+            c.SetLeftMargin(0.18)
+            c.SetRightMargin(0.10)
+            mg = TMultiGraph()
+            leg = make_legend(x1=0.25, y1=0.82, x2=0.65, y2=0.92)
+            pt_min, pt_max = map(float, pt_bin.replace("pt_", "").split("_"))
+            cent_min, cent_max = map(float, cent.split("_"))
+            leg.SetHeader(f"#it{{p}}_{{T}} {(pt_min/10):.1f}-{(pt_max/10):.1f} GeV/c, cent. {int(cent_min)}-{int(cent_max)}%")
+            leg.SetNColumns(3)
+            keep = []
+
+            for year in YEARS:
+
+                x, ex, y, ey = [], [], [], []
+
+                for cent_occ, pt_bins in dplus_kpipi_occ_diff_results[year].items():
+
+                    toks = cent_occ.split("_")
+                    cent_key = f"{toks[1]}_{toks[2]}"
+
+                    if cent_key != cent or pt_bin not in pt_bins:
+                        continue
+
+                    occ_min = float(toks[4])
+                    occ_max = float(toks[5])
+
+                    v = pt_bins[pt_bin]
+
+                    value = v[variable]
+                    error = v[f"{variable}_unc"]
+
+                    if variable in ["sigma", "shift"]:
+                        value *= 1000.
+                        error *= 1000.
+
+                    x.append(0.5 * (occ_min + occ_max))
+                    ex.append(0.5 * (occ_max - occ_min))
+                    y.append(value)
+                    ey.append(error)
+
+                if not x:
+                    continue
+
+                order = np.argsort(x)
+
+                x = np.array(x)[order]
+                ex = np.array(ex)[order]
+                y = np.array(y)[order]
+                ey = np.array(ey)[order]
+
+                g = TGraphErrors(len(x), array("d", x), array("d", y), array("d", ex), array("d", ey))
+
+                set_graph_style(g, year)
+
+                mg.Add(g)
+                keep.append(g)
+                leg.AddEntry(g, year, "lp")
+
+                out_file_occ.cd()
+                g.Write(f"{variable}_occ_cent_{cent}_{pt_bin}_{year}")
+
+            if mg.GetListOfGraphs().GetEntries() == 0:
+                continue
+
+            mg.Draw("AP")
+
+            set_plot_style(mg, xtitle="Occupancy FT0C", variable=variable, labels=AXIS_LABELS,
+                           particle="DplusKPiPi", ytitleoffset=Y_TITLE_OFFSETS[variable])
+
+            leg.Draw()
+            c.SaveAs(f"{BASEPATH}/final_plots/{variable}s/{variable}_vs_occ_cent_{cent}_{pt_bin}.pdf")
+
+out_file_occ.Close()

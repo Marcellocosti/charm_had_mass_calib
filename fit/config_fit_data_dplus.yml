@@ -7,9 +7,9 @@ inputs:
   # skip_years: ['2024', '2025']
   # skip_cents: [[0, 20], [20, 30], [30, 40], [40, 50]]
 
-skip_cent_integrated: true
+# skip_cent_integrated: true
 
-max_workers: 30
+max_workers: 40
 
 zfit_cpus:
   intra: 20
@@ -19,7 +19,7 @@ fit_configs:
   # below one per pT bin
   mass:
     mins: [1.75, 1.75, 1.75, 1.73, 1.73, 1.73, 1.71, 1.66, 1.66, 1.66, 1.66, 1.66]
-    maxs: [2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.00, 2.10, 2.10, 2.10, 2.19, 2.19]
+    maxs: [1.96, 1.96, 1.96, 1.96, 1.96, 2.00, 2.00, 2.10, 2.10, 2.10, 2.19, 2.19]
   rebin: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]
   signal:
     signal_funcs: [
@@ -82,16 +82,16 @@ fit_configs:
 
     file_for_params_fix: Null # /home/fchinu/Run3/Ds_Dp_ratio_PbPb/Projections_RawYields/MC/doublecb/RawYields/mass_fits.root # path to root file. If null, no file is used
     suffix_hist_for_params_fix: "_0_100" # "" for no centrality selection, can also use cent_min, cent_max to format name
-    fix_sigma_dplus_to_ds: [true, true, true, true, true, true, true, true, true, true, true, true]
+    fix_sigma_dplus_to_ds: [false, false, false, false, false, false, false, false, false, false, false, false]
     ratio_sigma_dplus_to_ds: [0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85] # value, list or path to root_file. If null or empty, set dplus sigma to that of ds. Otherwise, set to ds sigma * value
   bkg:
     bkg_funcs: [
-      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
-      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
-      # ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2']
-      ['expo'], ['expo'], ['expo'], ['expo'],
-      ['expo'], ['expo'], ['expo'], ['expo'],
-      ['expo'], ['expo'], ['expo'], ['expo']
+      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
+      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2'],
+      ['chebpol2'], ['chebpol2'], ['chebpol2'], ['chebpol2']
+      # ['expo'], ['expo'], ['expo'], ['expo'],
+      # ['expo'], ['expo'], ['expo'], ['expo'],
+      # ['expo'], ['expo'], ['expo'], ['expo']
     ]
     use_bkg_templ: [
       true, true, true, true,
